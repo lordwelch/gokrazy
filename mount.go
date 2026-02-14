@@ -3,6 +3,7 @@ package gokrazy
 import (
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"os"
@@ -11,6 +12,7 @@ import (
 	"strings"
 	"syscall"
 	"time"
+	"unsafe"
 
 	"golang.org/x/sys/unix"
 
@@ -230,6 +232,22 @@ func findGPTPartUUID(uuid string) (_ string, _ error) {
 	return dev, nil
 }
 
+func probeFilesystem(f io.ReadSeeker) (string, error) {
+	var (
+		fsUUID string
+		err    error
+	)
+	fsUUID, err = probeExt4(f)
+	if err == nil {
+		return fsUUID, nil
+	}
+	fsUUID, err = probeBTRFS(f)
+	if err == nil {
+		return fsUUID, nil
+	}
+	return fsUUID, err
+}
+
 func findFilesystemUUID(uuid string) (string, error) {
 	var dev string
 	uuid = strings.ToLower(uuid)
@@ -252,9 +270,9 @@ func findFilesystemUUID(uuid string) (string, error) {
 				continue
 			}
 			defer f.Close()
-			fsUUID, err := probeExt4(f)
+			fsUUID, err := probeFilesystem(f)
 			if err != nil {
-				log.Printf("probeExt4(%s): %v", dev, err)
+				log.Printf("probeFilesystem(%s): %v", dev, err)
 				continue
 			}
 			if strings.ToLower(fsUUID) == uuid {
@@ -326,6 +344,54 @@ func mountDevice(md config.MountDevice) error {
 	return nil
 }
 
+const (
+	BTRFS_IOC_SCAN_DEV  uintptr = 0x50009404
+	BTRFS_PATH_NAME_MAX         = 4087
+)
+
+type btrfs_ioctl_vol_args struct {
+	fd   uint64
+	name [BTRFS_PATH_NAME_MAX + 1]byte
+}
+
+func scanBTRFS() {
+	file, err := os.Open("/dev/btrfs-control")
+	if err != nil {
+		return
+	}
+	dirents, err := os.ReadDir("/dev")
+	if err != nil {
+		return
+	}
+	for _, de := range dirents {
+		dev := de.Name()
+		if strings.HasPrefix(dev, "mmcblk") ||
+			strings.HasPrefix(dev, "loop") ||
+			strings.HasPrefix(dev, "nvme") ||
+			strings.HasPrefix(dev, "sd") ||
+			strings.HasPrefix(dev, "hd") ||
+			strings.HasPrefix(dev, "vd") {
+			devname := filepath.Join("/dev", dev)
+			f, err := os.Open(devname)
+			if err != nil {
+				continue
+			}
+			defer f.Close()
+			fsUUID, err := probeBTRFS(f)
+			if err != nil {
+				continue
+			}
+			log.Printf("probeBTRFS(%s): %v", dev, fsUUID)
+			volume := btrfs_ioctl_vol_args{
+				fd:   0,
+				name: [4088]byte{},
+			}
+			copy(volume.name[:], []byte(devname))
+			syscall.Syscall(syscall.SYS_IOCTL, file.Fd(), BTRFS_IOC_SCAN_DEV, uintptr(unsafe.Pointer(&volume)))
+		}
+	}
+}
+
 // mountDevices mounts the user-specified devices. The packer persists them from
 // the instance config to mountdevices.json.
 func mountDevices() error {
@@ -347,6 +413,7 @@ func mountDevices() error {
 		md := md // remove once we are on Go 1.22
 		go func() {
 			for attempt := 0; ; attempt++ {
+				scanBTRFS()
 				err := mountDevice(md)
 				if err == nil {
 					return
