@@ -84,7 +84,7 @@ func (w *remoteSyslogWriter) Write(b []byte) (int, error) {
 	if w.syslog == nil {
 		return len(b), nil
 	}
-	for _, line := range strings.Split(strings.TrimSpace(string(b)), "\n") {
+	for line := range strings.SplitSeq(strings.TrimSpace(string(b)), "\n") {
 		w.syslog.Write([]byte(line + "\n"))
 	}
 	return len(b), nil
@@ -135,7 +135,7 @@ func (lrb *lineRingBuffer) Lines() []string {
 	lrb.RLock()
 	defer lrb.RUnlock()
 	lines := make([]string, 0, lrb.r.Len())
-	lrb.r.Do(func(x interface{}) {
+	lrb.r.Do(func(x any) {
 		if x != nil {
 			lines = append(lines, x.(string))
 		}
@@ -152,7 +152,7 @@ func (lrb *lineRingBuffer) Stream() (<-chan string, func()) {
 	// Need a chan that has at least len(ring) entries in it, otherwise populating it with existing
 	// contents of the ring will block forever.
 	stream := make(chan string, 101)
-	lrb.r.Do(func(x interface{}) {
+	lrb.r.Do(func(x any) {
 		if x != nil {
 			stream <- x.(string)
 		}
@@ -552,12 +552,9 @@ func supervise(s *service) {
 			}
 		}
 
-		for {
-			if pid <= 0 {
-				// Sanity check pid value.
-				// Sending 0 for pid in Wait4 has special meaning, which we don't want.
-				break
-			}
+		// Sanity check pid value.
+		// Sending 0 for pid in Wait4 has special meaning, which we don't want.
+		for pid > 1 {
 
 			// Wait4 return the pid of a process that exited,
 			// or -1 if there are no processes to be waited on (or error).

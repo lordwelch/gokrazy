@@ -51,7 +51,6 @@ func pollPowerButtons() error {
 		return err
 	}
 	for _, match := range matches {
-		match := match // copy
 		go func() {
 			if err := pollPowerButton1(match); err != nil {
 				log.Printf("pollPowerButton1(%s): %v", match, err)

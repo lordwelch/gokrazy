@@ -50,7 +50,7 @@ func Run(t *testing.T, pkgName string, deviceType string, qemuArgs []string) {
 	tempdir := t.TempDir()
 	err := os.WriteFile(
 		filepath.Join(tempdir, "config.json"),
-		[]byte(fmt.Sprintf(`
+		fmt.Appendf(nil, `
 {
     "Hostname": "qemu",
     "DeviceType": "%s",
@@ -66,16 +66,16 @@ func Run(t *testing.T, pkgName string, deviceType string, qemuArgs []string) {
     "EEPROMPackage": "",
     "InternalCompatibilityFlags": {}
 }
-`, deviceType, pkgName)), 0644)
+`, deviceType, pkgName), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}
 	err = os.WriteFile(
 		filepath.Join(tempdir, "go.mod"),
-		[]byte(fmt.Sprintf(`module %s
+		fmt.Appendf(nil, `module %s
 
 replace %s => %s
-`, pkgName, pkgName, tempdir)), 0644)
+`, pkgName, pkgName, tempdir), 0644)
 	if err != nil {
 		t.Fatal(err)
 	}

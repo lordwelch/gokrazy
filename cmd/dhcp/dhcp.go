@@ -359,7 +359,7 @@ func main() {
 
 	// Wait for up to 10 seconds for the link to indicate it has a
 	// carrier.
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		b, err := ioutil.ReadFile(filepath.Join("/sys/class/net", *ifname, "carrier"))
 		if err == nil && strings.TrimSpace(string(b)) == "1" {
 			break

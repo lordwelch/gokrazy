@@ -78,7 +78,7 @@ func mountCompat() error {
 		return fmt.Errorf("etc: %v", err)
 	}
 
-	if err := os.Mkdir("/etc/ssl", 0755); err != nil {
+	if err := os.Mkdir("/etc/ssl", 0o755); err != nil {
 		return fmt.Errorf("/etc/ssl: %v", err)
 	}
 
@@ -86,7 +86,7 @@ func mountCompat() error {
 		return fmt.Errorf("/etc/ssl: %v", err)
 	}
 
-	if err := ioutil.WriteFile("/etc/hosts", []byte("127.0.0.1 localhost\n::1 localhost\n"), 0644); err != nil {
+	if err := ioutil.WriteFile("/etc/hosts", []byte("127.0.0.1 localhost\n::1 localhost\n"), 0o644); err != nil {
 		return fmt.Errorf("/etc/hosts: %v", err)
 	}
 	return nil
@@ -115,7 +115,7 @@ func mountfs() error {
 		}
 	}
 
-	if err := os.MkdirAll("/dev/pts", 0755); err != nil {
+	if err := os.MkdirAll("/dev/pts", 0o755); err != nil {
 		return fmt.Errorf("mkdir /dev/pts: %v", err)
 	}
 
@@ -123,7 +123,7 @@ func mountfs() error {
 		return fmt.Errorf("devpts: %v", err)
 	}
 
-	if err := os.MkdirAll("/dev/shm", 0755); err != nil {
+	if err := os.MkdirAll("/dev/shm", 0o755); err != nil {
 		return fmt.Errorf("mkdir /dev/shm: %v", err)
 	}
 
@@ -156,7 +156,7 @@ func mountfs() error {
 	}
 
 	dev := rootdev.Partition(rootdev.Perm)
-	for _, fstype := range []string{"ext4", "vfat", "bcachefs"} {
+	for _, fstype := range []string{"ext4", "vfat", "bcachefs", "btrfs"} {
 		if err := syscall.Mount(dev, "/perm", fstype, 0, ""); err != nil {
 			log.Printf("Could not mount permanent storage partition %s as %s: %v", dev, fstype, err)
 		} else {
@@ -165,7 +165,7 @@ func mountfs() error {
 	}
 
 	// Create /perm/var if needed so that the /var symlink resolves
-	if err := os.MkdirAll("/perm/var", 0755); err != nil {
+	if err := os.MkdirAll("/perm/var", 0o755); err != nil {
 		log.Printf("mkdir /perm/var: %v", err)
 	}
 
@@ -288,11 +288,11 @@ func findFilesystemUUID(uuid string) (string, error) {
 }
 
 func deviceForSource(source string) (string, error) {
-	if strings.HasPrefix(source, "PARTUUID=") {
-		return findGPTPartUUID(strings.TrimPrefix(source, "PARTUUID="))
+	if after, ok := strings.CutPrefix(source, "PARTUUID="); ok {
+		return findGPTPartUUID(after)
 	}
-	if strings.HasPrefix(source, "UUID=") {
-		return findFilesystemUUID(strings.TrimPrefix(source, "UUID="))
+	if after, ok := strings.CutPrefix(source, "UUID="); ok {
+		return findFilesystemUUID(after)
 	}
 
 	return source, nil
@@ -307,7 +307,7 @@ func parseMountOptions(options string) (uintptr, string) {
 		data  []string
 	)
 
-	for _, o := range strings.Split(options, ",") {
+	for o := range strings.SplitSeq(options, ",") {
 		// If the option does not exist in the flags table, it is a data value
 		// for a specific fs type
 		if f, exists := flagKeywords[o]; exists && f.flag != 0 {
@@ -321,7 +321,6 @@ func parseMountOptions(options string) (uintptr, string) {
 		}
 	}
 	return flags, strings.Join(data, ",")
-
 }
 
 func mountDevice(md config.MountDevice) error {
@@ -410,8 +409,7 @@ func mountDevices() error {
 
 	// Start one goroutine per mount device
 	for _, md := range mountdevices {
-		md := md // remove once we are on Go 1.22
-		go func() {
+		go func(md config.MountDevice) {
 			for attempt := 0; ; attempt++ {
 				scanBTRFS()
 				err := mountDevice(md)
@@ -425,7 +423,7 @@ func mountDevices() error {
 					time.Sleep(5 * time.Second)
 				}
 			}
-		}()
+		}(md)
 	}
 
 	return nil

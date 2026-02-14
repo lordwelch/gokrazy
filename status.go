@@ -31,7 +31,7 @@ func parseMeminfo() map[string]int64 {
 		return nil
 	}
 	vals := make(map[string]int64)
-	for _, line := range strings.Split(string(meminfo), "\n") {
+	for line := range strings.SplitSeq(string(meminfo), "\n") {
 		if !strings.HasPrefix(line, "MemTotal") &&
 			!strings.HasPrefix(line, "MemAvailable") {
 			continue
@@ -142,7 +142,7 @@ func eventStreamRequested(r *http.Request) bool {
 }
 
 var templates = template.Must(template.New("root").
-	Funcs(map[string]interface{}{
+	Funcs(map[string]any{
 		"printSBOMHash": func(sbomHash string) string {
 			const sbomHashLen = 10
 			if len(sbomHash) < sbomHashLen {
