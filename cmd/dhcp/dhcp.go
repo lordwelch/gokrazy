@@ -236,7 +236,7 @@ func writeResolvConf(lease dhcp4.Lease) error {
 	for _, ns := range lease.DNS {
 		lines = append(lines, fmt.Sprintf("nameserver %v", ns))
 	}
-	if err := renameio.WriteFile(resolvConf, []byte(strings.Join(lines, "\n")+"\n"), 0644); err != nil {
+	if err := renameio.WriteFile(resolvConf, []byte(strings.Join(lines, "\n")+"\n"), 0o644); err != nil {
 		return fmt.Errorf("resolv.conf: %v", err)
 	}
 	return nil
@@ -321,8 +321,17 @@ func main() {
 			"extra_route_priority",
 			0,
 			"extra value to add to the interface’s priority (eth* defaults to priority 1, wlan* defaults to priority 5, interfaces without link are set to priority 1024)")
+
+		spoofHardwareAddr = flag.String(
+			"spoof_hardware_address",
+			"",
+			"allows spoofing the mac address")
 	)
 	flag.Parse()
+	hwaddr, err := net.ParseMAC(*spoofHardwareAddr)
+	if err != nil {
+		log.Printf("ParseMAC(%q): %v", *spoofHardwareAddr, err)
+	}
 
 	// NOTE: cannot gokrazy.WaitForClock() here, since the clock can only be
 	// initialized once the network is up.
@@ -350,6 +359,11 @@ func main() {
 	l, err := nl.LinkByName(*ifname)
 	if err != nil {
 		log.Fatalf("LinkByName: %v", err)
+	}
+	if *spoofHardwareAddr != "" {
+		if err := netlink.LinkSetHardwareAddr(l, hwaddr); err != nil {
+			log.Printf("LinkSetHardwareAddr(%v): %v", hwaddr, err)
+		}
 	}
 	if l.Attrs().OperState != netlink.OperUp {
 		if err := nl.LinkSetUp(l); err != nil {
